@@ -21,6 +21,7 @@ from core.downloader import (
     get_video_info,
     download_video_section,
     extract_audio_from_file,
+    check_video_status,
 )
 from core.transcript import (
     get_video_transcript,
@@ -135,24 +136,32 @@ tab_yt, tab_local = st.tabs(["🔗 YouTube Link", "📁 Upload Local Video File"
 # TAB 1: YOUTUBE VIDEO
 # ==========================================
 with tab_yt:
+    def on_sample_video_change():
+        chosen = st.session_state.get("sample_video_choice")
+        if chosen == "TED Talk: How to Speak so People Want to Listen":
+            st.session_state["yt_link_input"] = "https://www.youtube.com/watch?v=eIho2S0ZahI"
+        elif chosen == "Sample Music & Speech: Rick Astley":
+            st.session_state["yt_link_input"] = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        elif chosen == "Custom link (paste below)":
+            st.session_state["yt_link_input"] = ""
+
+    if "yt_link_input" not in st.session_state:
+        st.session_state["yt_link_input"] = ""
+
     sample_choice = st.selectbox(
         "💡 Quick Test (Or select a working sample video):",
         options=[
             "Custom link (paste below)",
             "TED Talk: How to Speak so People Want to Listen",
             "Sample Music & Speech: Rick Astley"
-        ]
+        ],
+        key="sample_video_choice",
+        on_change=on_sample_video_change
     )
-
-    default_val = ""
-    if sample_choice == "TED Talk: How to Speak so People Want to Listen":
-        default_val = "https://www.youtube.com/watch?v=eIho2S0ZahI"
-    elif sample_choice == "Sample Music & Speech: Rick Astley":
-        default_val = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 
     youtube_url = st.text_input(
         "Paste YouTube Video Link:",
-        value=default_val,
+        key="yt_link_input",
         placeholder="https://www.youtube.com/watch?v=..."
     )
 
@@ -179,6 +188,20 @@ with tab_yt:
         status_box = st.status("🎬 Processing YouTube Video...", expanded=True)
 
         try:
+            # Step 0: Availability Pre-flight check
+            status_box.write("🔍 Verifying video availability on YouTube...")
+            vid_status = check_video_status(youtube_url)
+            if not vid_status.get("available", True):
+                status_box.update(label="❌ Video Unavailable on YouTube", state="error")
+                st.error(
+                    f"⚠️ **{vid_status.get('reason')}**\n\n"
+                    "### 💡 How to solve this:\n"
+                    "1. **Check the Video**: Open this link in an Incognito browser window. If it shows *'Video unavailable'* or *'This live stream recording is not available'*, YouTube has deleted or hidden it, so no downloader can access it.\n"
+                    "2. **Use a Working Sample**: Select **'TED Talk'** or **'Rick Astley'** from the dropdown above to test the AI clipper on a guaranteed public video.\n"
+                    "3. **Switch to 'Upload Local Video File' tab**: If you have the video file saved on your phone/computer, click the **'📁 Upload Local Video File'** tab above to clip it directly without needing YouTube!"
+                )
+                st.stop()
+
             # Step 1: Video Info
             status_box.write("📥 Fetching video details...")
             info = get_video_info(youtube_url, proxy=proxy_val)
@@ -276,9 +299,18 @@ with tab_yt:
             elif "401" in err_msg or "invalid_api_key" in err_msg.lower():
                 st.error("⚠️ **Invalid Groq API Key**: Please check your API key in the sidebar.")
             elif "403" in err_msg or "forbidden" in err_msg.lower():
-                st.error("⚠️ **Access Denied (HTTP 403 Forbidden)**: YouTube blocked access to this specific video. This happens when the link is a private/expired live stream (like `/live/...` streams that ended), age-restricted, or blocked. Please test with an active public video or select a sample video above!")
+                st.error(
+                    "⚠️ **Access Denied (HTTP 403 Forbidden)**:\n\n"
+                    "YouTube blocked cloud access to this specific video. This happens when:\n"
+                    "- The link is an expired live stream, private, or age-restricted.\n"
+                    "- YouTube datacenter bot detection is blocking Streamlit Cloud's IP.\n\n"
+                    "**Solutions:**\n"
+                    "1. Try selecting a sample video above (e.g. TED Talk or Rick Astley).\n"
+                    "2. Switch to the **'📁 Upload Local Video File'** tab to upload and clip any video directly from your phone!\n"
+                    "3. Run the mobile tunnel from your PC (`run_mobile.bat`) to use your home IP instead of AWS cloud."
+                )
             elif "unavailable" in err_msg.lower():
-                st.error("⚠️ **Video Unavailable**: This specific YouTube video is unavailable, private, or has ended. Please test with another public video link!")
+                st.error("⚠️ **Video Unavailable**: YouTube reports this video does not exist, has ended, or is set to private. Please test with another public video link!")
             elif "timed out" in err_msg.lower() or "unable to download" in err_msg.lower():
                 st.error(f"Network Connection Issue: {err_msg}")
             else:
@@ -288,7 +320,7 @@ with tab_yt:
 # TAB 2: LOCAL VIDEO FILE UPLOAD
 # ==========================================
 with tab_local:
-    st.info("💡 Upload any video from your PC (podcasts, interviews, screen recordings, downloaded videos). It works even if YouTube is firewalled on your network!")
+    st.info("💡 Upload any video from your phone or PC (saved videos, screen recordings, podcasts, TikToks). Works 100% reliably and completely bypasses YouTube network restrictions!")
     uploaded_file = st.file_uploader("Choose a video file", type=["mp4", "mov", "mkv", "webm", "avi"])
 
     col_local_btn, _ = st.columns([1, 4])

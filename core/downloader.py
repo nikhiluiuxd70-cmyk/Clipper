@@ -43,10 +43,70 @@ def normalize_youtube_url(url: str) -> str:
         return f"https://{url}"
     return url
 
+def get_cookie_file() -> Optional[str]:
+    """Check if cookies.txt exists in root or Streamlit secrets for bypassing cloud 403s."""
+    local_cookie = Path(__file__).resolve().parent.parent / "cookies.txt"
+    if local_cookie.exists():
+        return str(local_cookie)
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and "YOUTUBE_COOKIES" in st.secrets:
+            cookie_content = st.secrets["YOUTUBE_COOKIES"]
+            temp_cookie = TEMP_DIR / "yt_cookies.txt"
+            temp_cookie.write_text(cookie_content, encoding="utf-8")
+            return str(temp_cookie)
+    except Exception:
+        pass
+    return None
+
+def check_video_status(url: str) -> Dict[str, Any]:
+    """
+    Quickly checks if a YouTube video is publicly accessible using YouTube's lightweight oEmbed API.
+    Prevents confusing 403 / network errors when videos are private, deleted, or unarchived live streams.
+    """
+    canonical_url = normalize_youtube_url(url)
+    try:
+        import requests
+        resp = requests.get(
+            f"https://www.youtube.com/oembed?url={canonical_url}&format=json",
+            timeout=6,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        )
+        if resp.status_code == 404:
+            return {
+                "available": False,
+                "status_code": 404,
+                "reason": (
+                    "YouTube reports this video does not exist (Status 404). "
+                    "This happens when a video has been deleted, set to private, "
+                    "or was a live stream that ended without being saved as a permanent public video."
+                )
+            }
+        elif resp.status_code in [401, 403]:
+            return {
+                "available": False,
+                "status_code": resp.status_code,
+                "reason": (
+                    "YouTube reports this video is private, restricted, or requires login permissions."
+                )
+            }
+        elif resp.status_code == 200:
+            data = resp.json()
+            return {
+                "available": True,
+                "status_code": 200,
+                "title": data.get("title", ""),
+                "author": data.get("author_name", "")
+            }
+    except Exception:
+        pass
+    return {"available": True, "status_code": 200}
+
 def get_video_info(url: str, proxy: Optional[str] = None) -> Dict[str, Any]:
     """Fetch video metadata without downloading the full video."""
     canonical_url = normalize_youtube_url(url)
     ffmpeg_exe = get_ffmpeg_bin()
+    cookie_path = get_cookie_file()
     ydl_opts = {
         'skip_download': True,
         'quiet': True,
@@ -66,6 +126,8 @@ def get_video_info(url: str, proxy: Optional[str] = None) -> Dict[str, Any]:
         },
         'geo_bypass': True,
     }
+    if cookie_path:
+        ydl_opts['cookiefile'] = cookie_path
     if proxy:
         ydl_opts['proxy'] = proxy
 
@@ -85,6 +147,7 @@ def download_audio_only(url: str, output_path: Optional[Path] = None, proxy: Opt
     """Download audio only (converted to mp3 or m4a) for Whisper transcription."""
     canonical_url = normalize_youtube_url(url)
     ffmpeg_exe = get_ffmpeg_bin()
+    cookie_path = get_cookie_file()
     if output_path is None:
         video_id = extract_video_id(canonical_url) or "temp_audio"
         output_path = TEMP_DIR / f"{video_id}.mp3"
@@ -115,6 +178,8 @@ def download_audio_only(url: str, output_path: Optional[Path] = None, proxy: Opt
         'overwrites': True,
         'socket_timeout': 20,
     }
+    if cookie_path:
+        ydl_opts['cookiefile'] = cookie_path
     if proxy:
         ydl_opts['proxy'] = proxy
 
@@ -131,6 +196,7 @@ def download_video_section(url: str, start_time: float, end_time: float, output_
     """
     canonical_url = normalize_youtube_url(url)
     ffmpeg_exe = get_ffmpeg_bin()
+    cookie_path = get_cookie_file()
     start_sec = max(0, start_time)
     end_sec = max(start_sec + 1, end_time)
 
@@ -157,6 +223,8 @@ def download_video_section(url: str, start_time: float, end_time: float, output_
         'no_warnings': True,
         'socket_timeout': 20,
     }
+    if cookie_path:
+        ydl_opts['cookiefile'] = cookie_path
     if proxy:
         ydl_opts['proxy'] = proxy
 
