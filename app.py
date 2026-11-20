@@ -210,7 +210,7 @@ with tab_part1:
                     f"https://10downloader.com/download?v={active_vid_id}",
                     use_container_width=True
                 )
-            st.caption("💡 Once downloaded to your phone's gallery, tap **'Part 2: AI Viral Clip Generator'** above to generate viral vertical clips with Groq AI!")
+            st.caption("⚡ **Speed Tip:** On SaveFrom / 10Downloader, select **720p or 480p** (around 15MB–25MB). It downloads in 3 seconds to your phone and uploads in just **5 seconds** in Part 2!")
             st.markdown("---")
 
     col_q1, col_btn1 = st.columns([1, 2])
@@ -361,9 +361,23 @@ with tab_part2:
         st.info(f"🎬 Active video: **{video_source_title}**")
         st.video(str(video_to_process))
     else:
+        st.markdown(
+            """
+            <div style="background-color: #1e2230; padding: 12px; border-radius: 8px; border-left: 4px solid #3b82f6; margin-bottom: 12px;">
+                <b style="color: #60a5fa;">⚡ Pro-Tips for Fast Uploads on Mobile:</b><br/>
+                <span style="font-size: 0.88rem; color: #ccc;">
+                    • <b>Use 720p or 480p videos (15MB–30MB):</b> They upload in <b>5–8 seconds</b>!<br/>
+                    • Large 1080p/4K files (150MB+) take 1–2 minutes over cellular data.<br/>
+                    • <b>Wait for 100%:</b> Make sure the blue upload bar reaches 100% and turns into a green checkmark before clicking 'Generate Clips'. Keep your phone screen awake so mobile does not pause the upload!
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
         uploaded_file = st.file_uploader(
-            "Choose a video file from your phone or PC",
-            type=["mp4", "mov", "mkv", "webm", "avi"]
+            "Choose a video or audio file from your phone or PC",
+            type=["mp4", "mov", "mkv", "webm", "avi", "mp3", "m4a", "wav"],
+            help="Videos are trimmed and reframed into 9:16 Shorts with subtitles. Audio files are analyzed for viral moments."
         )
         if uploaded_file:
             saved_local_path = TEMP_DIR / uploaded_file.name
@@ -371,7 +385,8 @@ with tab_part2:
                 f.write(uploaded_file.getbuffer())
             video_to_process = saved_local_path
             video_source_title = uploaded_file.name
-            st.success(f"✅ Uploaded: **{uploaded_file.name}** ({len(uploaded_file.getbuffer()) / (1024*1024):.1f} MB)")
+            file_size_mb = len(uploaded_file.getbuffer()) / (1024 * 1024)
+            st.success(f"✅ Uploaded & Ready: **{uploaded_file.name}** ({file_size_mb:.1f} MB)")
 
     col_clip_btn, _ = st.columns([1, 3])
     with col_clip_btn:

@@ -291,7 +291,9 @@ def download_full_video(
     return output_path
 
 def extract_audio_from_file(video_path: Path, output_audio: Optional[Path] = None) -> Path:
-    """Extract audio from local video file for Groq Whisper transcription."""
+    """Extract audio from local video or audio file for Groq Whisper transcription."""
+    if video_path.suffix.lower() in [".mp3", ".m4a", ".wav", ".aac", ".ogg"]:
+        return video_path
     ffmpeg_exe = get_ffmpeg_bin()
     if output_audio is None:
         output_audio = TEMP_DIR / f"{video_path.stem}_audio.mp3"
