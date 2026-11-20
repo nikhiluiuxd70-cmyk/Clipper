@@ -77,9 +77,22 @@ def get_transcript_from_groq(audio_path: Path, api_key: Optional[str] = None) ->
 
     client = Groq(api_key=key)
 
-    whisper_models = [GROQ_WHISPER_MODEL, "whisper-large-v3-turbo", "whisper-large-v3"]
-    seen = set()
-    models_to_try = [m for m in whisper_models if m and not (m in seen or seen.add(m))]
+    # Discover available whisper models from Groq account
+    models_to_try = []
+    try:
+        available_all = [m.id for m in client.models.list().data]
+        models_to_try = [m for m in available_all if "whisper" in m.lower()]
+    except Exception:
+        pass
+
+    fallback_list = [
+        "whisper-large-v3",
+        "whisper-large-v3-turbo",
+        "distil-whisper-large-v3-en"
+    ]
+    for fb in fallback_list:
+        if fb not in models_to_try:
+            models_to_try.append(fb)
 
     transcription = None
     last_err = None
@@ -97,7 +110,14 @@ def get_transcript_from_groq(audio_path: Path, api_key: Optional[str] = None) ->
             break
         except Exception as err:
             last_err = err
-            if "model" in str(err).lower() or "404" in str(err):
+            err_str = str(err).lower()
+            if (
+                "model" in err_str
+                or "404" in err_str
+                or "403" in err_str
+                or "permission" in err_str
+                or "blocked" in err_str
+            ):
                 continue
             raise err
 

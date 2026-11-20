@@ -182,6 +182,37 @@ with tab_part1:
         placeholder="https://www.youtube.com/watch?v=..."
     )
 
+    if p1_youtube_url:
+        active_vid_id = extract_video_id(p1_youtube_url)
+        if active_vid_id:
+            st.markdown(
+                """
+                <div style="background-color: #1e2230; padding: 14px; border-radius: 10px; border-left: 4px solid #00d26a; margin: 10px 0;">
+                    <b style="color: #00d26a; font-size: 1.05rem;">📲 Fast 1-Tap Mobile Download:</b><br/>
+                    <span style="font-size: 0.9rem; color: #ccc;">
+                        Because YouTube blocks cloud hosting servers (AWS), use these links to download straight onto your phone's 5G network with <b>0 blocks</b>:
+                    </span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            col_m1, col_m2 = st.columns(2)
+            with col_m1:
+                st.link_button(
+                    "⬇️ Download via SaveFrom (Instant MP4)",
+                    f"https://www.ssyoutube.com/watch?v={active_vid_id}",
+                    type="primary",
+                    use_container_width=True
+                )
+            with col_m2:
+                st.link_button(
+                    "⬇️ Download via 10Downloader (HD)",
+                    f"https://10downloader.com/download?v={active_vid_id}",
+                    use_container_width=True
+                )
+            st.caption("💡 Once downloaded to your phone's gallery, tap **'Part 2: AI Viral Clip Generator'** above to generate viral vertical clips with Groq AI!")
+            st.markdown("---")
+
     col_q1, col_btn1 = st.columns([1, 2])
     with col_q1:
         video_quality = st.selectbox(
@@ -197,7 +228,7 @@ with tab_part1:
     with col_btn1:
         st.write("")
         st.write("")
-        download_yt_btn = st.button("⬇️ Download YouTube Video", type="primary", use_container_width=True)
+        download_yt_btn = st.button("☁️ Or Download on Cloud Server", use_container_width=True)
 
     if download_yt_btn:
         if not p1_youtube_url:
@@ -258,10 +289,10 @@ with tab_part1:
             if "403" in err_str or "forbidden" in err_str.lower():
                 st.error(
                     "⚠️ **YouTube Cloud Access Blocked (HTTP 403 Forbidden)**:\n\n"
-                    "YouTube has restricted direct cloud downloads for this video.\n\n"
-                    "**Solutions:**\n"
-                    "1. If you run the app locally on your PC (`run_mobile.bat`), downloads will work with 0 restrictions.\n"
-                    "2. Or download the video on your device and use **Part 2** to upload and clip it directly!"
+                    "YouTube has blocked Streamlit Cloud's AWS server from downloading this video directly.\n\n"
+                    "**How to download right now on your phone:**\n"
+                    "1. Tap the green **'⬇️ Download via SaveFrom'** or **'10Downloader'** button above to download directly onto your phone's 5G connection with 0 blocks!\n"
+                    "2. Then switch to **'🎬 Part 2: AI Viral Clip Generator'** above and upload your video to create viral clips!"
                 )
             elif "unavailable" in err_str.lower():
                 st.error("⚠️ **Video Unavailable**: YouTube reports this video does not exist or has ended.")
@@ -432,7 +463,18 @@ with tab_part2:
         except Exception as e:
             err_msg = str(e)
             clip_status.update(label="❌ Error occurred", state="error")
-            if "429" in err_msg or "rate limit" in err_msg.lower():
+            if "blocked at the project level" in err_msg or "model_permission_blocked_project" in err_msg or ("403" in err_msg and "whisper" in err_msg.lower()):
+                st.error(
+                    "⚠️ **Groq Whisper Audio Model Blocked in Your Groq Project**:\n\n"
+                    "Your Groq API key is valid, but your Groq Project currently has audio models (`whisper`) disabled in project limits.\n\n"
+                    "### 🛠️ How to Enable it in 15 Seconds (100% Free):\n"
+                    "1. Click to open your Groq console: [console.groq.com/settings/project/limits](https://console.groq.com/settings/project/limits)\n"
+                    "2. Scroll down to the **Model Permissions** section.\n"
+                    "3. Select **Allow All Models** (or toggle on `whisper-large-v3` and `whisper-large-v3-turbo`).\n"
+                    "4. Click **Save** at the bottom.\n"
+                    "5. Come back here and tap **🚀 Generate Viral Clips with Groq AI** again!"
+                )
+            elif "429" in err_msg or "rate limit" in err_msg.lower():
                 st.error("⚠️ **Groq Rate Limit Reached**: Free accounts have a per-minute token limit. Please wait 30–60 seconds and try again!")
             elif "401" in err_msg or "invalid_api_key" in err_msg.lower():
                 st.error("⚠️ **Invalid Groq API Key**: Please check your API key in the sidebar.")
