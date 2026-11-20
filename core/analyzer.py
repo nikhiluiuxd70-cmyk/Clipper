@@ -68,15 +68,41 @@ Respond strictly with a JSON object adhering to this schema:
 }}
 """
 
-    response = client.chat.completions.create(
-        model=GROQ_LLM_MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        response_format={"type": "json_object"},
-        temperature=0.3
-    )
+    candidate_models = [
+        GROQ_LLM_MODEL,
+        "llama-3.1-8b-instant",
+        "llama-3.3-70b-versatile",
+        "llama3-70b-8192",
+        "llama3-8b-8192",
+        "mixtral-8x7b-32768"
+    ]
+    # Remove duplicates preserving order
+    seen = set()
+    models_to_try = [m for m in candidate_models if m and not (m in seen or seen.add(m))]
+
+    response = None
+    last_err = None
+    for model_name in models_to_try:
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3
+            )
+            break
+        except Exception as err:
+            last_err = err
+            err_str = str(err).lower()
+            if "model" in err_str or "not exist" in err_str or "404" in err_str or "access" in err_str:
+                continue
+            raise err
+
+    if response is None:
+        raise last_err
 
     response_text = response.choices[0].message.content
     data = json.loads(response_text)

@@ -77,13 +77,32 @@ def get_transcript_from_groq(audio_path: Path, api_key: Optional[str] = None) ->
 
     client = Groq(api_key=key)
 
+    whisper_models = [GROQ_WHISPER_MODEL, "whisper-large-v3-turbo", "whisper-large-v3"]
+    seen = set()
+    models_to_try = [m for m in whisper_models if m and not (m in seen or seen.add(m))]
+
+    transcription = None
+    last_err = None
     with open(audio_path, "rb") as file:
-        transcription = client.audio.transcriptions.create(
-            file=(audio_path.name, file.read()),
-            model=GROQ_WHISPER_MODEL,
-            response_format="verbose_json",
-            temperature=0.0
-        )
+        audio_bytes = file.read()
+
+    for w_model in models_to_try:
+        try:
+            transcription = client.audio.transcriptions.create(
+                file=(audio_path.name, audio_bytes),
+                model=w_model,
+                response_format="verbose_json",
+                temperature=0.0
+            )
+            break
+        except Exception as err:
+            last_err = err
+            if "model" in str(err).lower() or "404" in str(err):
+                continue
+            raise err
+
+    if transcription is None:
+        raise last_err
 
     # transcription segments
     segments = []
