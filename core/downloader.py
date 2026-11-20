@@ -233,6 +233,63 @@ def download_video_section(url: str, start_time: float, end_time: float, output_
 
     return output_path
 
+def download_full_video(
+    url: str,
+    output_path: Optional[Path] = None,
+    quality: str = "720p",
+    proxy: Optional[str] = None
+) -> Path:
+    """
+    Download the entire YouTube video to a high-quality MP4 file.
+    """
+    canonical_url = normalize_youtube_url(url)
+    ffmpeg_exe = get_ffmpeg_bin()
+    cookie_path = get_cookie_file()
+
+    if output_path is None:
+        video_id = extract_video_id(canonical_url) or "downloaded_video"
+        output_path = DOWNLOADS_DIR / f"{video_id}.mp4"
+
+    height = 720
+    if quality == "1080p":
+        height = 1080
+    elif quality == "480p":
+        height = 480
+    elif quality == "360p":
+        height = 360
+
+    ydl_opts = {
+        'format': f'bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]/best[height<={height}][ext=mp4]/best',
+        'outtmpl': str(output_path),
+        'ffmpeg_location': ffmpeg_exe,
+        'source_address': '0.0.0.0',
+        'js_runtimes': {'node': {}},
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios', 'web', 'mweb'],
+            }
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+        },
+        'geo_bypass': True,
+        'overwrites': True,
+        'quiet': True,
+        'no_warnings': True,
+        'socket_timeout': 25,
+        'merge_output_format': 'mp4',
+    }
+    if cookie_path:
+        ydl_opts['cookiefile'] = cookie_path
+    if proxy:
+        ydl_opts['proxy'] = proxy
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([canonical_url])
+
+    return output_path
+
 def extract_audio_from_file(video_path: Path, output_audio: Optional[Path] = None) -> Path:
     """Extract audio from local video file for Groq Whisper transcription."""
     ffmpeg_exe = get_ffmpeg_bin()
