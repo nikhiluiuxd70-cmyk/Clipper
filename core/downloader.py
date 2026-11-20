@@ -117,7 +117,7 @@ def get_video_info(url: str, proxy: Optional[str] = None) -> Dict[str, Any]:
         'js_runtimes': {'node': {}},
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'ios', 'web', 'mweb'],
+                'player_client': ['android'],
             }
         },
         'http_headers': {
@@ -160,7 +160,7 @@ def download_audio_only(url: str, output_path: Optional[Path] = None, proxy: Opt
         'js_runtimes': {'node': {}},
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'ios', 'web', 'mweb'],
+                'player_client': ['android'],
             }
         },
         'http_headers': {
@@ -208,7 +208,7 @@ def download_video_section(url: str, start_time: float, end_time: float, output_
         'js_runtimes': {'node': {}},
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'ios', 'web', 'mweb'],
+                'player_client': ['android'],
             }
         },
         'http_headers': {
@@ -266,7 +266,7 @@ def download_full_video(
         'js_runtimes': {'node': {}},
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'ios', 'web', 'mweb'],
+                'player_client': ['android'],
             }
         },
         'http_headers': {
