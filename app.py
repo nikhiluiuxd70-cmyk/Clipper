@@ -344,10 +344,14 @@ with tab_part2:
     has_dl_video = "downloaded_video" in st.session_state and os.path.exists(st.session_state["downloaded_video"]["path"])
     video_to_process = None
     video_source_title = ""
+    yt_direct_url = None
 
-    source_options = ["📁 Upload Video File from Phone / PC"]
+    source_options = [
+        "⚡ Paste YouTube Link (Instant - Zero Upload!)",
+        "📁 Upload Video or Audio File from Phone / PC"
+    ]
     if has_dl_video:
-        source_options.insert(0, f"📥 Use Downloaded Video: {st.session_state['downloaded_video']['title'][:40]}...")
+        source_options.insert(0, f"📥 Use Downloaded Video: {st.session_state['downloaded_video']['title'][:35]}...")
 
     source_choice = st.radio(
         "Select Video Input:",
@@ -355,7 +359,43 @@ with tab_part2:
         horizontal=True
     )
 
-    if has_dl_video and source_choice.startswith("📥 Use Downloaded Video"):
+    if source_choice.startswith("⚡ Paste YouTube Link"):
+        st.markdown(
+            """
+            <div style="background-color: #1e2230; padding: 12px; border-radius: 8px; border-left: 4px solid #00d26a; margin-bottom: 12px;">
+                <b style="color: #00d26a;">⚡ 0-Second Upload:</b><br/>
+                <span style="font-size: 0.88rem; color: #ccc;">
+                    No need to download or upload large 50MB files! Paste the YouTube URL below. Groq AI reads the captions and only streams the exact 30s clips!
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        def on_p2_sample_change():
+            sel = st.session_state.get("p2_sample_pick")
+            if sel == "TED Talk: How to Speak so People Want to Listen":
+                st.session_state["p2_yt_url_input"] = "https://www.youtube.com/watch?v=eIho2S0ZahI"
+            elif sel == "Sample Music & Speech: Rick Astley":
+                st.session_state["p2_yt_url_input"] = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            elif sel == "Custom link":
+                st.session_state["p2_yt_url_input"] = ""
+
+        if "p2_yt_url_input" not in st.session_state:
+            st.session_state["p2_yt_url_input"] = ""
+
+        st.selectbox(
+            "Quick Sample (Or paste your link below):",
+            options=["Custom link", "TED Talk: How to Speak so People Want to Listen", "Sample Music & Speech: Rick Astley"],
+            key="p2_sample_pick",
+            on_change=on_p2_sample_change
+        )
+        yt_direct_url = st.text_input(
+            "Paste YouTube Video Link:",
+            key="p2_yt_url_input",
+            placeholder="https://www.youtube.com/watch?v=..."
+        )
+
+    elif has_dl_video and source_choice.startswith("📥 Use Downloaded Video"):
         video_to_process = Path(st.session_state["downloaded_video"]["path"])
         video_source_title = st.session_state["downloaded_video"]["title"]
         st.info(f"🎬 Active video: **{video_source_title}**")
@@ -382,10 +422,10 @@ with tab_part2:
         if uploaded_file:
             saved_local_path = TEMP_DIR / uploaded_file.name
             with open(saved_local_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
+                shutil.copyfileobj(uploaded_file, f, length=1024 * 1024)
             video_to_process = saved_local_path
             video_source_title = uploaded_file.name
-            file_size_mb = len(uploaded_file.getbuffer()) / (1024 * 1024)
+            file_size_mb = saved_local_path.stat().st_size / (1024 * 1024)
             st.success(f"✅ Uploaded & Ready: **{uploaded_file.name}** ({file_size_mb:.1f} MB)")
 
     col_clip_btn, _ = st.columns([1, 3])
@@ -393,84 +433,152 @@ with tab_part2:
         generate_clips_btn = st.button("🚀 Generate Viral Clips with Groq AI", type="primary", use_container_width=True)
 
     if generate_clips_btn:
-        if not video_to_process or not video_to_process.exists():
-            st.error("Please upload or select a video file first.")
-            st.stop()
-
         if not user_groq_key:
             st.error("Please enter your Groq API key in the sidebar.")
             st.stop()
 
+        is_yt_mode = source_choice.startswith("⚡ Paste YouTube Link")
+
+        if is_yt_mode:
+            if not yt_direct_url:
+                st.error("Please enter a valid YouTube video link.")
+                st.stop()
+            canonical_yt = normalize_youtube_url(yt_direct_url)
+            vid_id = extract_video_id(canonical_yt)
+            if not vid_id:
+                st.error("Invalid YouTube URL. Please check the link.")
+                st.stop()
+        else:
+            if not video_to_process or not video_to_process.exists():
+                st.error("Please wait for your file upload to complete (green checkmark) before generating.")
+                st.stop()
+
         clip_status = st.status("🎬 Processing Video with AI...", expanded=True)
 
         try:
-            # Step 1: Extract Audio
-            clip_status.write("🎙️ Extracting audio track with FFmpeg...")
-            audio_path = extract_audio_from_file(video_to_process)
+            if is_yt_mode:
+                # Direct YouTube Stream Mode (0 MB Upload!)
+                clip_status.write("🔍 Verifying video availability...")
+                v_check = check_video_status(canonical_yt)
+                if not v_check.get("available", True):
+                    clip_status.update(label="❌ Video Unavailable", state="error")
+                    st.error(f"⚠️ {v_check.get('reason')}")
+                    st.stop()
 
-            # Step 2: Transcribe via Groq Whisper
-            clip_status.write("⚡ Transcribing audio with Groq Whisper Large v3...")
-            transcript = get_transcript_from_groq(audio_path, api_key=user_groq_key)
+                clip_status.write("📥 Fetching video details...")
+                info = get_video_info(canonical_yt, proxy=proxy_val)
+                clip_status.write(f"🎬 Video: **{info['title']}**")
 
-            if not transcript or len(transcript) == 0:
-                clip_status.update(label="❌ Failed to extract speech", state="error")
-                st.error("Could not detect any speech in this video. Please make sure the video has clear spoken audio.")
-                st.stop()
+                clip_status.write("🎙️ Extracting captions (Zero file upload needed!)...")
+                transcript = get_video_transcript(canonical_yt, api_key=user_groq_key, proxy=proxy_val)
+                if not transcript:
+                    clip_status.update(label="❌ No transcript found", state="error")
+                    st.error("Could not obtain any spoken captions for this video.")
+                    st.stop()
+                clip_status.write(f"✅ Extracted **{len(transcript)}** transcript segments.")
 
-            clip_status.write(f"✅ Transcribed **{len(transcript)}** spoken segments.")
+                clip_status.write("🧠 Groq AI is detecting high-retention viral moments...")
+                clips_data = analyze_transcript_for_clips(
+                    transcript=transcript,
+                    target_duration=target_duration,
+                    num_clips=num_clips,
+                    api_key=user_groq_key
+                )
+                if not clips_data:
+                    clip_status.update(label="❌ No viral moments found", state="error")
+                    st.warning("Could not find suitable clips matching your criteria.")
+                    st.stop()
+                clip_status.write(f"🔥 Detected **{len(clips_data)}** viral clip candidates!")
 
-            # Step 3: Groq LLM Viral Moment Detection
-            clip_status.write("🧠 Groq AI is analyzing transcript for high-retention viral moments...")
-            clips_data = analyze_transcript_for_clips(
-                transcript=transcript,
-                target_duration=target_duration,
-                num_clips=num_clips,
-                api_key=user_groq_key
-            )
+                clip_status.write("✂️ Downloading ONLY the 30s viral sections & rendering 9:16 Shorts...")
+                rendered_clips = []
+                for idx, clip in enumerate(clips_data, 1):
+                    clip_status.write(f"Rendering Clip {idx}/{len(clips_data)}: *{clip['title']}* ({clip['start_time']}s - {clip['end_time']}s)...")
+                    raw_sec = TEMP_DIR / f"{vid_id}_slice_{idx}.mp4"
+                    final_clip_path = OUTPUT_DIR / f"clip_{vid_id}_{idx}_{int(time.time())}.mp4"
 
-            if not clips_data:
-                clip_status.update(label="❌ No viral moments found", state="error")
-                st.warning("Could not find suitable clips matching your duration criteria.")
-                st.stop()
-
-            clip_status.write(f"🔥 Detected **{len(clips_data)}** viral clip candidates!")
-
-            # Step 4: Render Vertical Clips
-            clip_status.write("✂️ Rendering 9:16 vertical clips with animated captions...")
-            rendered_clips = []
-
-            for idx, clip in enumerate(clips_data, 1):
-                clip_status.write(f"Rendering Clip {idx}/{len(clips_data)}: *{clip['title']}* ({clip['start_time']}s - {clip['end_time']}s)...")
-                final_clip_path = OUTPUT_DIR / f"clip_{idx}_{int(time.time())}.mp4"
-
-                # Subtitles
-                sub_path = None
-                if enable_subtitles:
-                    clip_sub_segments = extract_clip_transcript(
-                        full_transcript=transcript,
-                        clip_start=clip["start_time"],
-                        clip_end=clip["end_time"]
+                    download_video_section(
+                        url=canonical_yt,
+                        start_time=clip["start_time"],
+                        end_time=clip["end_time"],
+                        output_path=raw_sec,
+                        proxy=proxy_val
                     )
-                    if clip_sub_segments:
-                        ass_file = TEMP_DIR / f"clip_sub_{idx}.ass"
-                        sub_path = generate_ass_subtitles(
-                            segments=clip_sub_segments,
-                            output_path=ass_file,
-                            font_size=font_size
-                        )
 
-                # Process with modern FFmpeg
-                process_video_clip(
-                    input_video=video_to_process,
-                    output_path=final_clip_path,
-                    start_time=clip["start_time"],
-                    duration=clip["duration"],
-                    framing_mode=framing_option,
-                    subtitle_path=sub_path
+                    sub_path = None
+                    if enable_subtitles:
+                        clip_sub_segments = extract_clip_transcript(transcript, clip["start_time"], clip["end_time"])
+                        if clip_sub_segments:
+                            ass_file = TEMP_DIR / f"{vid_id}_sub_{idx}.ass"
+                            sub_path = generate_ass_subtitles(clip_sub_segments, ass_file, font_size=font_size)
+
+                    process_video_clip(
+                        input_video=raw_sec,
+                        output_path=final_clip_path,
+                        framing_mode=framing_option,
+                        subtitle_path=sub_path
+                    )
+                    if raw_sec.exists():
+                        try: raw_sec.unlink()
+                        except: pass
+
+                    clip["file_path"] = str(final_clip_path)
+                    rendered_clips.append(clip)
+
+            else:
+                # Local Video / Audio File Mode
+                clip_status.write("🎙️ Extracting audio track with FFmpeg...")
+                audio_path = extract_audio_from_file(video_to_process)
+
+                clip_status.write("⚡ Transcribing audio with Groq Whisper...")
+                transcript = get_transcript_from_groq(audio_path, api_key=user_groq_key)
+
+                if not transcript or len(transcript) == 0:
+                    clip_status.update(label="❌ Failed to extract speech", state="error")
+                    st.error("Could not detect any speech in this video. Please make sure the video has clear spoken audio.")
+                    st.stop()
+
+                clip_status.write(f"✅ Transcribed **{len(transcript)}** spoken segments.")
+
+                clip_status.write("🧠 Groq AI is analyzing transcript for high-retention viral moments...")
+                clips_data = analyze_transcript_for_clips(
+                    transcript=transcript,
+                    target_duration=target_duration,
+                    num_clips=num_clips,
+                    api_key=user_groq_key
                 )
 
-                clip["file_path"] = str(final_clip_path)
-                rendered_clips.append(clip)
+                if not clips_data:
+                    clip_status.update(label="❌ No viral moments found", state="error")
+                    st.warning("Could not find suitable clips matching your duration criteria.")
+                    st.stop()
+
+                clip_status.write(f"🔥 Detected **{len(clips_data)}** viral clip candidates!")
+
+                clip_status.write("✂️ Rendering 9:16 vertical clips with animated captions...")
+                rendered_clips = []
+                for idx, clip in enumerate(clips_data, 1):
+                    clip_status.write(f"Rendering Clip {idx}/{len(clips_data)}: *{clip['title']}* ({clip['start_time']}s - {clip['end_time']}s)...")
+                    final_clip_path = OUTPUT_DIR / f"clip_{idx}_{int(time.time())}.mp4"
+
+                    sub_path = None
+                    if enable_subtitles:
+                        clip_sub_segments = extract_clip_transcript(transcript, clip["start_time"], clip["end_time"])
+                        if clip_sub_segments:
+                            ass_file = TEMP_DIR / f"clip_sub_{idx}.ass"
+                            sub_path = generate_ass_subtitles(clip_sub_segments, ass_file, font_size=font_size)
+
+                    process_video_clip(
+                        input_video=video_to_process,
+                        output_path=final_clip_path,
+                        start_time=clip["start_time"],
+                        duration=clip["duration"],
+                        framing_mode=framing_option,
+                        subtitle_path=sub_path
+                    )
+
+                    clip["file_path"] = str(final_clip_path)
+                    rendered_clips.append(clip)
 
             clip_status.update(label="🎉 All viral clips successfully created!", state="complete", expanded=False)
             st.session_state["clips"] = rendered_clips
