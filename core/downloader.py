@@ -51,10 +51,20 @@ def get_video_info(url: str, proxy: Optional[str] = None) -> Dict[str, Any]:
         'skip_download': True,
         'quiet': True,
         'no_warnings': True,
-        'socket_timeout': 15,
+        'socket_timeout': 20,
         'source_address': '0.0.0.0',
         'ffmpeg_location': ffmpeg_exe,
         'js_runtimes': {'node': {}},
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios', 'web', 'mweb'],
+            }
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+        },
+        'geo_bypass': True,
     }
     if proxy:
         ydl_opts['proxy'] = proxy
@@ -85,6 +95,16 @@ def download_audio_only(url: str, output_path: Optional[Path] = None, proxy: Opt
         'ffmpeg_location': ffmpeg_exe,
         'source_address': '0.0.0.0',
         'js_runtimes': {'node': {}},
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios', 'web', 'mweb'],
+            }
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+        },
+        'geo_bypass': True,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -93,7 +113,7 @@ def download_audio_only(url: str, output_path: Optional[Path] = None, proxy: Opt
         'quiet': True,
         'no_warnings': True,
         'overwrites': True,
-        'socket_timeout': 15,
+        'socket_timeout': 20,
     }
     if proxy:
         ydl_opts['proxy'] = proxy
@@ -120,12 +140,22 @@ def download_video_section(url: str, start_time: float, end_time: float, output_
         'ffmpeg_location': ffmpeg_exe,
         'source_address': '0.0.0.0',
         'js_runtimes': {'node': {}},
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios', 'web', 'mweb'],
+            }
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+        },
+        'geo_bypass': True,
         'download_ranges': yt_dlp.utils.download_range_func(None, [(start_sec, end_sec)]),
         'force_keyframes_at_cuts': True,
         'overwrites': True,
         'quiet': True,
         'no_warnings': True,
-        'socket_timeout': 15,
+        'socket_timeout': 20,
     }
     if proxy:
         ydl_opts['proxy'] = proxy

@@ -135,8 +135,24 @@ tab_yt, tab_local = st.tabs(["🔗 YouTube Link", "📁 Upload Local Video File"
 # TAB 1: YOUTUBE VIDEO
 # ==========================================
 with tab_yt:
+    sample_choice = st.selectbox(
+        "💡 Quick Test (Or select a working sample video):",
+        options=[
+            "Custom link (paste below)",
+            "TED Talk: How to Speak so People Want to Listen",
+            "Sample Music & Speech: Rick Astley"
+        ]
+    )
+
+    default_val = ""
+    if sample_choice == "TED Talk: How to Speak so People Want to Listen":
+        default_val = "https://www.youtube.com/watch?v=eIho2S0ZahI"
+    elif sample_choice == "Sample Music & Speech: Rick Astley":
+        default_val = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
     youtube_url = st.text_input(
         "Paste YouTube Video Link:",
+        value=default_val,
         placeholder="https://www.youtube.com/watch?v=..."
     )
 
@@ -255,13 +271,12 @@ with tab_yt:
         except Exception as e:
             err_msg = str(e)
             status_box.update(label="❌ Error occurred", state="error")
-            if "unavailable" in err_msg.lower():
-                st.error("⚠️ This specific YouTube video is unavailable, private, or has ended. Please test with another public YouTube video link!")
+            if "403" in err_msg or "forbidden" in err_msg.lower():
+                st.error("⚠️ **Access Denied (HTTP 403 Forbidden)**: YouTube blocked access to this specific video. This happens when the link is a private/expired live stream (like `/live/...` streams that ended), age-restricted, or blocked. Please test with an active public video or select a sample video above!")
+            elif "unavailable" in err_msg.lower():
+                st.error("⚠️ **Video Unavailable**: This specific YouTube video is unavailable, private, or has ended. Please test with another public video link!")
             elif "timed out" in err_msg.lower() or "unable to download" in err_msg.lower():
                 st.error(f"Network Connection Issue: {err_msg}")
-                st.info(
-                    "💡 **Tip:** If your local network is heavily restricted, you can switch to the **'📁 Upload Local Video File'** tab above to clip any video file directly on your computer!"
-                )
             else:
                 st.error(f"Error processing video: {err_msg}")
 
