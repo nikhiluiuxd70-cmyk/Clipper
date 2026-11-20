@@ -4,6 +4,24 @@ from groq import Groq
 from core.transcript import format_transcript_for_llm
 from config import GROQ_API_KEY, GROQ_LLM_MODEL
 
+def get_active_groq_models(client: Groq) -> List[str]:
+    """Dynamically query Groq API for active, supported models."""
+    preferred = [
+        "llama-3.1-8b-instant",
+        "llama-3.3-70b-versatile",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b"
+    ]
+    try:
+        remote = client.models.list()
+        active_ids = {m.id for m in remote.data}
+        available = [m for m in preferred if m in active_ids]
+        if available:
+            return available
+    except Exception:
+        pass
+    return ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]
+
 def analyze_transcript_for_clips(
     transcript: List[Dict[str, Any]],
     target_duration: int = 30,
@@ -13,7 +31,7 @@ def analyze_transcript_for_clips(
     api_key: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
-    Use Groq LLM (Llama 3.3 70B) to analyze video transcript and find the most engaging,
+    Use Groq LLM (Llama 3.1 8B / Llama 3.3 70B) to analyze video transcript and find the most engaging,
     standalone viral clips matching user duration preferences.
     """
     key = api_key or GROQ_API_KEY
@@ -68,17 +86,9 @@ Respond strictly with a JSON object adhering to this schema:
 }}
 """
 
-    candidate_models = [
-        GROQ_LLM_MODEL,
-        "llama-3.1-8b-instant",
-        "llama-3.3-70b-versatile",
-        "llama3-70b-8192",
-        "llama3-8b-8192",
-        "mixtral-8x7b-32768"
-    ]
-    # Remove duplicates preserving order
-    seen = set()
-    models_to_try = [m for m in candidate_models if m and not (m in seen or seen.add(m))]
+    models_to_try = get_active_groq_models(client)
+    if GROQ_LLM_MODEL and GROQ_LLM_MODEL not in models_to_try:
+        models_to_try.insert(0, GROQ_LLM_MODEL)
 
     response = None
     last_err = None
@@ -97,8 +107,10 @@ Respond strictly with a JSON object adhering to this schema:
         except Exception as err:
             last_err = err
             err_str = str(err).lower()
-            if "model" in err_str or "not exist" in err_str or "404" in err_str or "access" in err_str:
+            # Only skip if the specific model ID is genuinely not found or not permitted
+            if "model_not_found" in err_str or "does not exist" in err_str:
                 continue
+            # If it's a rate limit or other error, raise it immediately with clear details
             raise err
 
     if response is None:

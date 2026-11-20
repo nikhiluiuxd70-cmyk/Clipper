@@ -271,7 +271,11 @@ with tab_yt:
         except Exception as e:
             err_msg = str(e)
             status_box.update(label="❌ Error occurred", state="error")
-            if "403" in err_msg or "forbidden" in err_msg.lower():
+            if "429" in err_msg or "rate limit" in err_msg.lower():
+                st.error("⚠️ **Groq Rate Limit Reached**: Free accounts have a per-minute token limit. Please wait 30–60 seconds and try again!")
+            elif "401" in err_msg or "invalid_api_key" in err_msg.lower():
+                st.error("⚠️ **Invalid Groq API Key**: Please check your API key in the sidebar.")
+            elif "403" in err_msg or "forbidden" in err_msg.lower():
                 st.error("⚠️ **Access Denied (HTTP 403 Forbidden)**: YouTube blocked access to this specific video. This happens when the link is a private/expired live stream (like `/live/...` streams that ended), age-restricted, or blocked. Please test with an active public video or select a sample video above!")
             elif "unavailable" in err_msg.lower():
                 st.error("⚠️ **Video Unavailable**: This specific YouTube video is unavailable, private, or has ended. Please test with another public video link!")
@@ -382,8 +386,14 @@ with tab_local:
             st.session_state["clips"] = generated_clips
 
         except Exception as e:
+            err_msg = str(e)
             status_box.update(label="❌ Error occurred", state="error")
-            st.error(f"Error processing video: {str(e)}")
+            if "429" in err_msg or "rate limit" in err_msg.lower():
+                st.error("⚠️ **Groq Rate Limit Reached**: Free accounts have a per-minute token limit. Please wait 30–60 seconds and try again!")
+            elif "401" in err_msg or "invalid_api_key" in err_msg.lower():
+                st.error("⚠️ **Invalid Groq API Key**: Please check your API key in the sidebar.")
+            else:
+                st.error(f"Error processing video: {err_msg}")
 
 # --- Display Generated Clips ---
 if "clips" in st.session_state and st.session_state["clips"]:

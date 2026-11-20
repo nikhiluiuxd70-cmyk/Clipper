@@ -149,12 +149,45 @@ def get_video_transcript(url: str, api_key: Optional[str] = None, proxy: Optiona
 def format_transcript_for_llm(transcript: List[Dict[str, Any]]) -> str:
     """
     Convert raw transcript list into a clean, timestamped text block for the LLM.
-    e.g. [00:15 - 00:20] "Hello everyone welcome back..."
+    Merges adjacent fragments into 12-second paragraphs to reduce token count
+    and stay well within Groq free-tier rate limits (6000 TPM).
     """
-    lines = []
-    for entry in transcript:
-        start_str = format_timestamp(entry['start'])
-        end_str = format_timestamp(entry.get('end', entry['start'] + entry['duration']))
-        text = entry['text']
-        lines.append(f"[{start_str} - {end_str}] {text}")
-    return "\n".join(lines)
+    if not transcript:
+        return ""
+
+    merged = []
+    current_chunk = []
+    chunk_start = transcript[0]['start']
+    chunk_duration = 0.0
+
+    for item in transcript:
+        text = item['text'].strip()
+        if not text:
+            continue
+        current_chunk.append(text)
+        chunk_duration += item.get('duration', 2.0)
+
+        # Group speech into coherent ~12-second thoughts
+        if chunk_duration >= 12.0:
+            start_str = format_timestamp(chunk_start)
+            end_sec = item['start'] + item.get('duration', 0.0)
+            end_str = format_timestamp(end_sec)
+            merged.append(f"[{start_str} - {end_str}] {' '.join(current_chunk)}")
+            current_chunk = []
+            chunk_start = end_sec
+            chunk_duration = 0.0
+
+    if current_chunk:
+        start_str = format_timestamp(chunk_start)
+        last_sec = transcript[-1]['start'] + transcript[-1].get('duration', 0.0)
+        end_str = format_timestamp(last_sec)
+        merged.append(f"[{start_str} - {end_str}] {' '.join(current_chunk)}")
+
+    # If transcript is very long (>3000 words), sample evenly to stay within TPM limits
+    total_text = "\n".join(merged)
+    words = total_text.split()
+    if len(words) > 3000:
+        step = max(2, len(merged) // 80)
+        return "\n".join(merged[::step])
+
+    return total_text
